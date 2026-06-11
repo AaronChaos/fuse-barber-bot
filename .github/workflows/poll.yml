@@ -1,0 +1,38 @@
+name: Poll
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci --omit=dev
+      - name: Run poll
+        env:
+          NEARCUT_SESSION: ${{ secrets.NEARCUT_SESSION }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: node poll.mjs
+      - name: Commit updated state
+        run: |
+          if [[ -n "$(git status --porcelain .state.json)" ]]; then
+            git config user.name  "fuse-bot"
+            git config user.email "fuse-bot@users.noreply.github.com"
+            git add .state.json
+            git commit -m "state: dedup new slot notifications"
+            git push
+          fi

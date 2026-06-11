@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fuse Barber Bot — criteria</title>
+<style>
+  :root {
+    --bg: #14110f;
+    --panel: #1c1916;
+    --text: #ece6dd;
+    --muted: #8c857c;
+    --accent: #b2621a;
+    --border: #2a2520;
+    --ok: #5fa05f;
+    --warn: #c4892b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    margin: 0; padding: 2rem 1rem;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
+  .lede { color: var(--muted); margin: 0 0 2rem; font-size: 0.9rem; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1.25rem 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+  .panel h2 {
+    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 0 0 1rem; font-weight: 600;
+  }
+  label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+  input[type=text], input[type=date], input[type=time] {
+    width: 100%; padding: 0.55rem 0.7rem; font-size: 1rem;
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    font-family: inherit;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
+  .field { margin-bottom: 0.85rem; }
+  .field:last-child { margin-bottom: 0; }
+  .shops { display: flex; gap: 1.25rem; }
+  .shops label { display: flex; align-items: center; gap: 0.5rem; color: var(--text); font-size: 0.95rem; cursor: pointer; }
+  .day-row {
+    display: grid; grid-template-columns: 80px 90px 1fr 1fr; gap: 0.7rem;
+    align-items: center; padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .day-row:last-child { border-bottom: none; }
+  .day-name { font-weight: 500; }
+  .day-skip { display: flex; align-items: center; gap: 0.4rem; color: var(--muted); font-size: 0.85rem; cursor: pointer; }
+  .day-row input[disabled] { opacity: 0.3; cursor: not-allowed; }
+  .actions { display: flex; gap: 0.7rem; align-items: center; margin-top: 0.5rem; }
+  button {
+    background: var(--accent); color: #fff; border: none;
+    padding: 0.7rem 1.2rem; border-radius: 6px; font-weight: 600;
+    font-size: 0.95rem; cursor: pointer; font-family: inherit;
+  }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #status { font-size: 0.85rem; color: var(--muted); margin-left: auto; }
+  #status.ok { color: var(--ok); }
+  #status.warn { color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Fuse Barber Bot</h1>
+  <p class="lede">Set what you're looking for. Save writes criteria.json. Deploy commits + pushes to GitHub so the cron picks it up.</p>
+
+  <form id="form">
+    <div class="panel">
+      <h2>Target</h2>
+      <div class="field">
+        <label for="barberName">Barber</label>
+        <input type="text" id="barberName" name="barberName" required>
+      </div>
+      <div class="field">
+        <label>Shops</label>
+        <div class="shops">
+          <label><input type="checkbox" name="shops" value="CTHP44"> CTHP44</label>
+          <label><input type="checkbox" name="shops" value="YGR349"> YGR349</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Date window</h2>
+      <div class="row">
+        <div>
+          <label for="from">From</label>
+          <input type="date" id="from" name="from" required>
+        </div>
+        <div>
+          <label for="to">To</label>
+          <input type="date" id="to" name="to" required>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Time-of-day rules</h2>
+      <div id="dayRules"></div>
+    </div>
+
+    <div class="actions">
+      <button type="submit">Save</button>
+      <button type="button" id="deployBtn" class="secondary">Save &amp; deploy</button>
+      <span id="status"></span>
+    </div>
+  </form>
+</div>
+
+<script>
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function minutesToTime(mins) {
+  if (mins == null) return '';
+  return `${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`;
+}
+function timeToMinutes(str) {
+  if (!str) return undefined;
+  const [h, m] = str.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function renderDayRules(timeRules) {
+  const wrap = document.getElementById('dayRules');
+  wrap.innerHTML = '';
+  for (let i = 0; i < 7; i++) {
+    const r = timeRules[String(i)] || {};
+    const row = document.createElement('div');
+    row.className = 'day-row';
+    row.innerHTML = `
+      <div class="day-name">${DAYS[i]}</div>
+      <label class="day-skip"><input type="checkbox" data-day="${i}" data-field="skip" ${r.skip ? 'checked' : ''}> skip</label>
+      <div>
+        <label>After</label>
+        <input type="time" data-day="${i}" data-field="after" value="${minutesToTime(r.afterMinutes)}" ${r.skip ? 'disabled' : ''}>
+      </div>
+      <div>
+        <label>Before</label>
+        <input type="time" data-day="${i}" data-field="before" value="${minutesToTime(r.beforeMinutes)}" ${r.skip ? 'disabled' : ''}>
+      </div>
+    `;
+    wrap.appendChild(row);
+  }
+  wrap.querySelectorAll('input[data-field="skip"]').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      const day = e.target.dataset.day;
+      wrap.querySelectorAll(`input[data-day="${day}"][data-field="after"], input[data-day="${day}"][data-field="before"]`)
+        .forEach(i => { i.disabled = e.target.checked; });
+    });
+  });
+}
+
+function collectFormCriteria(existing) {
+  const fd = new FormData(document.getElementById('form'));
+  const shops = [...document.querySelectorAll('input[name="shops"]:checked')].map(i => i.value);
+  const timeRules = {};
+  for (let i = 0; i < 7; i++) {
+    const skip = document.querySelector(`input[data-day="${i}"][data-field="skip"]`).checked;
+    if (skip) { timeRules[String(i)] = { skip: true }; continue; }
+    const after = document.querySelector(`input[data-day="${i}"][data-field="after"]`).value;
+    const before = document.querySelector(`input[data-day="${i}"][data-field="before"]`).value;
+    const rule = {};
+    if (after) rule.afterMinutes = timeToMinutes(after);
+    if (before) rule.beforeMinutes = timeToMinutes(before);
+    timeRules[String(i)] = rule;
+  }
+  return {
+    ...existing,
+    barberName: fd.get('barberName').trim(),
+    shops,
+    targetWindow: { from: fd.get('from'), to: fd.get('to') },
+    timeRules,
+  };
+}
+
+function setStatus(msg, kind = '') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = kind;
+}
+
+let current;
+
+async function load() {
+  const res = await fetch('/api/criteria');
+  current = await res.json();
+  document.getElementById('barberName').value = current.barberName || 'Reece';
+  document.getElementById('from').value = current.targetWindow?.from || '';
+  document.getElementById('to').value = current.targetWindow?.to || '';
+  document.querySelectorAll('input[name="shops"]').forEach(cb => {
+    cb.checked = (current.shops || []).includes(cb.value);
+  });
+  renderDayRules(current.timeRules || {});
+}
+
+async function save(deploy = false) {
+  const body = collectFormCriteria(current);
+  setStatus(deploy ? 'Saving + deploying…' : 'Saving…');
+  const res = await fetch('/api/criteria', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ criteria: body, deploy }),
+  });
+  const result = await res.json();
+  if (!res.ok) { setStatus('Error: ' + (result.error || res.status), 'warn'); return; }
+  current = body;
+  setStatus(deploy ? `Deployed (${result.commit?.slice(0,7) || 'pushed'})` : 'Saved', 'ok');
+  setTimeout(() => setStatus(''), 4000);
+}
+
+document.getElementById('form').addEventListener('submit', (e) => { e.preventDefault(); save(false); });
+document.getElementById('deployBtn').addEventListener('click', () => save(true));
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "barberName": "Reece",
+  "shops": [
+    "CTHP44",
+    "YGR349"
+  ],
+  "service": "6X0JOL",
+  "targetWindow": {
+    "from": "2026-06-22",
+    "to": "2026-06-25"
+  },
+  "timeRules": {
+    "0": {
+      "skip": true
+    },
+    "1": {
+      "afterMinutes": 1030
+    },
+    "2": {
+      "afterMinutes": 1030
+    },
+    "3": {
+      "afterMinutes": 1030
+    },
+    "4": {
+      "afterMinutes": 1030
+    },
+    "5": {
+      "afterMinutes": 1030
+    },
+    "6": {}
+  }
+}
